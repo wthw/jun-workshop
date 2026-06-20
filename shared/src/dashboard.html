@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{TITLE}} — Dashboard</title>
+<style>
+  :root { --bg:#0f1117; --panel:#181b24; --border:#2a2f3d; --text:#e6e8ee; --muted:#8b91a3;
+          --accent:#4f8cff; --tool:#c79a4b; --ok:#4bc78a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .sub { color:var(--muted); font-size:12px; margin-left:auto; }
+  header a { color:var(--accent); text-decoration:none; font-size:13px; }
+  main { padding:20px; display:flex; flex-direction:column; gap:28px; max-width:1100px; margin:0 auto; }
+  section h2 { font-size:14px; font-weight:600; margin:0 0 4px; }
+  section .hint { color:var(--muted); font-size:12px; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--border);
+          border-radius:10px; overflow:hidden; font-size:13px; }
+  th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; background:#141822; }
+  tr:last-child td { border-bottom:none; }
+  td.mono, .mono { font-family:ui-monospace, monospace; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  td.prompt { max-width:420px; }
+  .id { color:var(--muted); font-size:11px; }
+  a.url { color:var(--accent); text-decoration:none; }
+  .empty { color:var(--muted); font-style:italic; padding:12px; }
+  .total td { font-weight:600; background:#141822; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{TITLE}} — Dashboard</h1>
+  <a href="/">← console</a>
+  <span class="sub" id="updated"></span>
+</header>
+<main>
+  <section>
+    <h2>User prompts</h2>
+    <p class="hint">Every verbatim prompt and the id (<span class="mono">upromptid</span>) its LLM calls are attributed to.</p>
+    <div id="prompts"></div>
+  </section>
+  <section>
+    <h2>Token usage per LLM call</h2>
+    <p class="hint">One row per LLM call, linked to the prompt that triggered it.</p>
+    <div id="calls"></div>
+  </section>
+  <section>
+    <h2>Competitor prices (“Are we competitive?”)</h2>
+    <p class="hint">Structured findings reported by the pricing agent after a real Google Search.</p>
+    <div id="competitors"></div>
+  </section>
+</main>
+<script>
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const shortId = (id) => id ? `<span class="id mono" title="${esc(id)}">${esc(String(id).slice(0, 8))}</span>` : '<span class="id">—</span>';
+  const when = (s) => s ? new Date(s).toLocaleString() : '';
+  const empty = (msg) => `<p class="empty">${msg}</p>`;
+
+  function renderPrompts(rows) {
+    if (!rows.length) return empty('No prompts recorded yet — ask a question in the console.');
+    return `<table><thead><tr><th>upromptid</th><th>agent</th><th>prompt</th><th>when</th></tr></thead><tbody>${
+      rows.map((r) => `<tr><td>${shortId(r.id)}</td><td class="mono">${esc(r.agent)}</td>` +
+        `<td class="prompt">${esc(r.prompt)}</td><td>${esc(when(r.created_at))}</td></tr>`).join('')
+    }</tbody></table>`;
+  }
+
+  function renderCalls(rows) {
+    if (!rows.length) return empty('No LLM calls recorded yet.');
+    let p = 0, o = 0, t = 0;
+    const body = rows.map((r) => {
+      p += r.prompt_tokens; o += r.output_tokens; t += r.total_tokens;
+      return `<tr><td>${shortId(r.uprompt_id)}</td><td class="mono">${esc(r.agent)}</td>` +
+        `<td class="mono">${esc(r.model ?? '')}</td><td class="num">${r.prompt_tokens}</td>` +
+        `<td class="num">${r.output_tokens}</td><td class="num">${r.total_tokens}</td>` +
+        `<td>${esc(when(r.created_at))}</td></tr>`;
+    }).join('');
+    return `<table><thead><tr><th>upromptid</th><th>agent</th><th>model</th>` +
+      `<th class="num">prompt</th><th class="num">output</th><th class="num">total</th><th>when</th></tr></thead>` +
+      `<tbody>${body}<tr class="total"><td colspan="3">Total (shown)</td>` +
+      `<td class="num">${p}</td><td class="num">${o}</td><td class="num">${t}</td><td></td></tr></tbody></table>`;
+  }
+
+  function renderCompetitors(rows) {
+    if (!rows.length) return empty('No competitor findings yet — ask the pricing agent if we are competitive on a product.');
+    return `<table><thead><tr><th>sku</th><th>competitor</th><th>their price</th><th>url</th><th>when</th></tr></thead><tbody>${
+      rows.map((r) => `<tr><td class="mono">${esc(r.sku)}</td><td>${esc(r.competitor ?? '')}</td>` +
+        `<td class="num">${r.price != null ? '$' + Number(r.price).toFixed(2) : '—'}</td>` +
+        `<td><a class="url" href="${esc(r.url)}" target="_blank" rel="noreferrer">${esc(r.url)}</a></td>` +
+        `<td>${esc(when(r.created_at))}</td></tr>`).join('')
+    }</tbody></table>`;
+  }
+
+  async function refresh() {
+    try {
+      const data = await (await fetch('/api/analytics')).json();
+      document.getElementById('prompts').innerHTML = renderPrompts(data.prompts);
+      document.getElementById('calls').innerHTML = renderCalls(data.llmCalls);
+      document.getElementById('competitors').innerHTML = renderCompetitors(data.competitorPrices);
+      document.getElementById('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
+    } catch (e) {
+      document.getElementById('updated').textContent = 'failed to load: ' + e.message;
+    }
+  }
+  refresh();
+  setInterval(refresh, 4000);
+</script>
+</body>
+</html>

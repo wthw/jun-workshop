@@ -13,11 +13,11 @@ import {
   stringifyContent,
   toA2a,
 } from '@google/adk';
+import { analyticsSnapshot, recordLlmCall, recordUserPrompt } from './analytics.ts';
 
-const CONSOLE_HTML = readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), 'console.html'),
-  'utf8',
-);
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CONSOLE_HTML = readFileSync(path.join(HERE, 'console.html'), 'utf8');
+const DASHBOARD_HTML = readFileSync(path.join(HERE, 'dashboard.html'), 'utf8');
 
 export interface AgentServerOptions {
   agent: BaseAgent;
@@ -42,6 +42,15 @@ export async function startAgentServer({ agent, port, title }: AgentServerOption
     res.type('html').send(CONSOLE_HTML.replaceAll('{{TITLE}}', title));
   });
 
+  // Operational dashboard: verbatim prompts, per-call token usage, competitor findings.
+  app.get('/dashboard', (_req, res) => {
+    res.type('html').send(DASHBOARD_HTML.replaceAll('{{TITLE}}', title));
+  });
+  app.get('/api/analytics', (req, res) => {
+    const limit = Math.min(Number(req.query.limit ?? 100) || 100, 500);
+    res.json(analyticsSnapshot(limit));
+  });
+
   app.post('/api/chat', async (req, res) => {
     const { sessionId, message } = req.body as { sessionId?: string; message?: string };
     if (!sessionId || !message) {
@@ -60,12 +69,34 @@ export async function startAgentServer({ agent, port, title }: AgentServerOption
     };
 
     try {
+      // (a) token accounting: save the verbatim prompt, then attribute each LLM
+      // call's token counts to the id we hand back to the console.
+      const upromptId = recordUserPrompt({ agent: agent.name, prompt: message });
+      send('uprompt', { upromptId });
+
       await sessionService.getOrCreateSession({ appName: agent.name, userId: 'console', sessionId });
       for await (const event of runner.runAsync({
         userId: 'console',
         sessionId,
         newMessage: { role: 'user', parts: [{ text: message }] },
       })) {
+        const usage = event.usageMetadata;
+        if (usage) {
+          recordLlmCall({
+            upromptId,
+            agent: event.author ?? agent.name,
+            model: typeof (agent as { model?: unknown }).model === 'string' ? ((agent as { model?: unknown }).model as string) : undefined,
+            promptTokens: usage.promptTokenCount,
+            outputTokens: usage.candidatesTokenCount,
+            totalTokens: usage.totalTokenCount,
+          });
+          send('usage', {
+            agent: event.author,
+            promptTokens: usage.promptTokenCount,
+            outputTokens: usage.candidatesTokenCount,
+            totalTokens: usage.totalTokenCount,
+          });
+        }
         for (const call of getFunctionCalls(event)) {
           send('tool_call', { agent: event.author, name: call.name, args: call.args });
         }
