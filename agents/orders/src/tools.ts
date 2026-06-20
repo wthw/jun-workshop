@@ -19,9 +19,32 @@ export function getCustomerOrders(input: { customerId: number }): { customer?: a
   throw new Error('Not implemented: getCustomerOrders');
 }
 
-export function getOrderDetails(input: { orderId: number }): any {
-  // TODO: return the full order, or `{ error }` if unknown.
-  throw new Error('Not implemented: getOrderDetails');
+interface OrderRow {
+  id: number;
+  customer_id: number;
+  sku: string;
+  quantity: number;
+  total: number;
+  status: string;
+  order_date: string;
+  delivered_date: string | null;
+}
+
+export function getOrderDetails(input: { orderId: number }) {
+  const db = openDb();
+  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(input.orderId) as unknown as OrderRow | undefined;
+  db.close();
+  if (!row) return { error: `No order found with id ${input.orderId}.` };
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    sku: row.sku,
+    quantity: row.quantity,
+    total: row.total,
+    status: row.status,
+    orderDate: row.order_date,
+    deliveredDate: row.delivered_date,
+  };
 }
 
 export function checkReturnEligibility(input: { orderId: number }): any {
@@ -41,11 +64,12 @@ export const getCustomerOrdersTool = new FunctionTool({
 
 export const getOrderDetailsTool = new FunctionTool({
   name: 'get_order_details',
-  description: 'TODO: describe this tool so the model knows when and how to call it.',
+  description:
+    'Get full details for a single order by its numeric order id: customer, SKU, quantity, total, status and dates.',
   parameters: z.object({
-    // TODO: define the parameters (e.g. orderId) with .describe() hints.
+    orderId: z.number().describe('Numeric order id, e.g. 88231.'),
   }),
-  execute: async () => getOrderDetails({ orderId: 0 }),
+  execute: getOrderDetails,
 });
 
 export const checkReturnEligibilityTool = new FunctionTool({

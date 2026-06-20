@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Server } from 'node:http';
 import {
   type BaseAgent,
+  InMemoryMemoryService,
   InMemorySessionService,
   Runner,
   getFunctionCalls,
@@ -36,7 +37,11 @@ export async function startAgentServer({ agent, port, title }: AgentServerOption
   app.use(express.json());
 
   const sessionService = new InMemorySessionService();
-  const runner = new Runner({ appName: agent.name, agent, sessionService });
+  // Long-term memory shared across sessions. Each finished case is ingested
+  // below so a later, unrelated session can recall it via the agent's
+  // load_memory tool (used by the orchestrator).
+  const memoryService = new InMemoryMemoryService();
+  const runner = new Runner({ appName: agent.name, agent, sessionService, memoryService });
 
   app.get('/', (_req, res) => {
     res.type('html').send(CONSOLE_HTML.replaceAll('{{TITLE}}', title));
@@ -111,6 +116,17 @@ export async function startAgentServer({ agent, port, title }: AgentServerOption
           if (text) send('text', { agent: event.author, text });
         }
       }
+
+      // Ingest the completed case into long-term memory so future sessions can
+      // recall it (e.g. the orchestrator looking up a competitor price we found
+      // earlier). Failure here must not break the chat response.
+      try {
+        const finished = await sessionService.getSession({ appName: agent.name, userId: 'console', sessionId });
+        if (finished) await memoryService.addSessionToMemory(finished);
+      } catch (memErr) {
+        console.error(`[${agent.name}] failed to add session to memory:`, memErr);
+      }
+
       send('done', {});
     } catch (err) {
       send('error', { message: err instanceof Error ? err.message : String(err) });
