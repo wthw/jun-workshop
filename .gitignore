@@ -2,3 +2,9 @@ node_modules/
 shared/data/*.db
 .env
 dist/
+
+# Python virtual environment
+deploy/venv/
+__pycache__/
+*.pyc
+*.pyo

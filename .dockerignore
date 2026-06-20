@@ -1,0 +1,18 @@
+.git
+.vscode
+.env
+node_modules
+shared/data
+
+# Python (not needed in the Node container)
+deploy/venv
+deploy/agent_engine
+__pycache__
+*.pyc
+*.pyo
+
+# Docs and scripts (not needed at runtime)
+deploy/*.sh
+DEPLOYMENT.md
+changes.md
+docs/
