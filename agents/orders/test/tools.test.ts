@@ -10,17 +10,15 @@ beforeAll(() => {
   seed();
 });
 
-// get_customer_orders is a workshop stub in the minimal orders agent — these
-// describe the target behavior but are left as todo until it's implemented.
 describe('getCustomerOrders', () => {
-  it.todo('lists all orders for customer 1042 with product names', () => {
+  it('lists all orders for customer 1042 with product names', () => {
     const result = getCustomerOrders({ customerId: 1042 });
     expect(result.customer?.name).toBe('Alex Morgan');
     expect(result.orders.length).toBe(3);
     expect(result.orders.find((o) => o.id === 88231)?.productName).toContain('WH-1000XM5');
   });
 
-  it.todo('reports unknown customers clearly', () => {
+  it('reports unknown customers clearly', () => {
     expect(getCustomerOrders({ customerId: 9999 })).toHaveProperty('error');
   });
 });
@@ -36,28 +34,26 @@ describe('getOrderDetails', () => {
   });
 });
 
-// check_return_eligibility (the 30-day policy) is a workshop stub in the minimal
-// orders agent — left as todo until the policy is implemented.
 describe('checkReturnEligibility (30-day policy from delivery date)', () => {
-  it.todo('order 88231 (delivered 21 days ago) is eligible with ~9 days left', () => {
+  it('order 88231 (delivered 21 days ago) is eligible with ~9 days left', () => {
     const result = checkReturnEligibility({ orderId: 88231 });
     expect(result.eligible).toBe(true);
     expect(result.daysLeft).toBeGreaterThanOrEqual(8);
     expect(result.daysLeft).toBeLessThanOrEqual(9);
   });
 
-  it.todo('order 88133 (delivered 31 days ago) is past the window', () => {
+  it('order 88133 (delivered 31 days ago) is past the window', () => {
     const result = checkReturnEligibility({ orderId: 88133 });
     expect(result.eligible).toBe(false);
     expect(result.reason).toMatch(/window|30/i);
   });
 
-  it.todo('undelivered orders are not eligible', () => {
+  it('undelivered orders are not eligible', () => {
     const result = checkReturnEligibility({ orderId: 88240 }); // status: shipped
     expect(result.eligible).toBe(false);
   });
 
-  it.todo('already-returned orders are not eligible', () => {
+  it('already-returned orders are not eligible', () => {
     const result = checkReturnEligibility({ orderId: 88150 });
     expect(result.eligible).toBe(false);
   });
